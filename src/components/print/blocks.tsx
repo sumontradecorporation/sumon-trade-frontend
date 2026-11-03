@@ -115,18 +115,24 @@ type TableVariant = 'boxed' | 'band' | 'hairline' | 'gst' | 'compact';
 export function ItemsTable({ doc, variant, theme }: { doc: PrintDoc; variant: TableVariant; theme?: string }) {
   const { show } = doc;
   const gst = variant === 'gst';
+  const isChallan = doc.type === 'DELIVERY_CHALLAN';
   const head: { key: string; label: string; right?: boolean; w?: string }[] = [
     { key: 'sn', label: '#', w: 'w-7' },
     { key: 'name', label: 'Item name' },
   ];
   if (show.hsn) head.push({ key: 'hsn', label: 'HS Code' });
-  head.push({ key: 'qty', label: 'Quantity', right: true });
-  if (show.prices) {
-    head.push({ key: 'price', label: gst ? 'Rate' : 'Price/Unit', right: true });
-    if (show.discount) head.push({ key: 'disc', label: 'Discount', right: true });
-    if (gst && show.tax) head.push({ key: 'taxable', label: 'Taxable Value', right: true });
-    if (show.tax) head.push({ key: 'tax', label: 'VAT', right: true });
-    head.push({ key: 'amount', label: 'Amount', right: true });
+  if (isChallan) {
+    head.push({ key: 'qty', label: 'Quantity', right: true });
+    head.push({ key: 'unit', label: 'Unit', right: true });
+  } else {
+    head.push({ key: 'qty', label: 'Quantity', right: true });
+    if (show.prices) {
+      head.push({ key: 'price', label: gst ? 'Rate' : 'Price/Unit', right: true });
+      if (show.discount) head.push({ key: 'disc', label: 'Discount', right: true });
+      if (gst && show.tax) head.push({ key: 'taxable', label: 'Taxable Value', right: true });
+      if (show.tax) head.push({ key: 'tax', label: 'VAT', right: true });
+      head.push({ key: 'amount', label: 'Amount', right: true });
+    }
   }
 
   const cell = (key: string, l: PrintDoc['lines'][number]): ReactNode => {
@@ -143,7 +149,9 @@ export function ItemsTable({ doc, variant, theme }: { doc: PrintDoc; variant: Ta
       case 'hsn':
         return l.hsn || '';
       case 'qty':
-        return `${qty(l.qty)}${l.unit ? ` ${l.unit}` : ''}`;
+        return isChallan ? qty(l.qty) : `${qty(l.qty)}${l.unit ? ` ${l.unit}` : ''}`;
+      case 'unit':
+        return l.unit || '';
       case 'price':
         return num(l.price);
       case 'disc':
@@ -177,7 +185,7 @@ export function ItemsTable({ doc, variant, theme }: { doc: PrintDoc; variant: Ta
       case 'name':
         return 'Total';
       case 'qty':
-        return qty(doc.totals.qty);
+        return isChallan ? qty(doc.totals.qty) : qty(doc.totals.qty);
       case 'disc':
         return num(doc.totals.itemDiscount);
       case 'taxable':
@@ -253,7 +261,7 @@ export function ItemsTable({ doc, variant, theme }: { doc: PrintDoc; variant: Ta
 
 /** Subtotal → total → received → balance. */
 export function TotalsBlock({ doc, className, strong, strongStyle }: { doc: PrintDoc; className?: string; strong?: string; strongStyle?: CSSProperties }) {
-  if (!doc.show.prices) return null;
+  if (!doc.show.prices || doc.type === 'DELIVERY_CHALLAN') return null;
   const t = doc.totals;
   const row = (label: ReactNode, value: string, cls?: string, style?: CSSProperties) => (
     <div className={cn('flex justify-between gap-6 py-0.5', cls)} style={style}>
@@ -321,7 +329,7 @@ export function TaxSummary({ doc, className, headStyle }: { doc: PrintDoc; class
 }
 
 export function Words({ doc, className, label = 'Amount in words' }: { doc: PrintDoc; className?: string; label?: string }) {
-  if (!doc.show.amountInWords) return null;
+  if (!doc.show.amountInWords || doc.type === 'DELIVERY_CHALLAN') return null;
   return (
     <div className={className}>
       <div className="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">{label}</div>
@@ -362,6 +370,33 @@ export function TermsBlock({ doc, className }: { doc: PrintDoc; className?: stri
 
 export function SignBlock({ doc, className }: { doc: PrintDoc; className?: string }) {
   if (!doc.show.signature) return null;
+  if (doc.type === 'DELIVERY_CHALLAN') {
+    return (
+      <div className={cn('grid grid-cols-3 gap-6', className)}>
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold">Received By</div>
+          {(['Name', 'Comment', 'Date', 'Signature'] as const).map((f) => (
+            <div key={f} className="flex gap-1 pb-0.5 text-[10px]">
+              <span className="text-gray-600 whitespace-nowrap">{f}:</span>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold">Delivered By</div>
+          {(['Name', 'Comment', 'Date', 'Signature'] as const).map((f) => (
+            <div key={f} className="flex gap-1 pb-0.5 text-[10px]">
+              <span className="text-gray-600 whitespace-nowrap">{f}:</span>
+            </div>
+          ))}
+        </div>
+        <div className="text-center">
+          <div className="mb-1 text-[11px]">For {doc.seller.name}</div>
+          {doc.seller.signature ? <img src={doc.seller.signature} alt="" crossOrigin="anonymous" className="mx-auto h-14 object-contain" /> : <div className="h-14" />}
+          <div className="min-w-40 border-t border-gray-400 pt-1 text-[10px] text-gray-600">Authorised signatory</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cn('flex items-end justify-between gap-8', className)}>
       {doc.show.receiverSign ? (
